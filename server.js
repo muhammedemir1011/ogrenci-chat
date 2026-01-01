@@ -15,8 +15,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
-app.get("/", (req, res) => {
-  res.sendFile(__dirname + "/public/index.html");
+app.get("/chat.html", (req, res) => {
+  if (!req.session.user) {
+    return res.redirect("/");
+  }
+  res.sendFile(__dirname + "/public/chat.html");
 });
 
 app.use(
