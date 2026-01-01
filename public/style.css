@@ -1,0 +1,52 @@
+body {
+  margin: 0;
+  font-family: Arial;
+  background: #2b2d31;
+  color: white;
+}
+
+.app {
+  display: flex;
+  height: 100vh;
+}
+
+.users {
+  width: 200px;
+  background: #1e1f22;
+  padding: 10px;
+}
+
+.users li {
+  list-style: none;
+  padding: 5px;
+  cursor: pointer;
+}
+
+.users li:hover {
+  background: #3a3c43;
+}
+
+.chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+#messages {
+  flex: 1;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.input {
+  display: flex;
+}
+
+input {
+  flex: 1;
+  padding: 10px;
+}
+
+button {
+  padding: 10px;
+}

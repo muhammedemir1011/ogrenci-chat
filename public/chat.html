@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Sohbet</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+  <div class="users">
+    <h3>👥 Online</h3>
+    <ul id="userList"></ul>
+  </div>
+
+  <div class="chat">
+    <h3 id="chatTitle">Bir kullanıcı seç</h3>
+    <div id="messages"></div>
+    <div class="input">
+      <input id="msg" placeholder="Mesaj yaz..." />
+      <button onclick="send()">Gönder</button>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="chat.js"></script>
+</body>
+</html>
