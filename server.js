@@ -1,101 +1,148 @@
 const express = require("express");
 const session = require("express-session");
-const bcrypt = require("bcryptjs");
 const sqlite3 = require("sqlite3").verbose();
+const bcrypt = require("bcryptjs");
+const path = require("path");
 const http = require("http");
-const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
 
-const db = new sqlite3.Database("./database.db");
-
-app.use(express.json());
+// ====== AYARLAR ======
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "ogrenci-gizli",
+    resave: false,
+    saveUninitialized: false,
+  })
+);
+
+// ====== STATIC ======
 app.use(express.static("public"));
 
+// ====== DATABASE ======
+const db = new sqlite3.Database("./database.db");
+
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE,
+      password TEXT
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT,
+      message TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+});
+
+// ====== ROUTES ======
+
+// Ana sayfa
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// Chat sayfası (login şart)
 app.get("/chat.html", (req, res) => {
   if (!req.session.user) {
     return res.redirect("/");
   }
-  res.sendFile(__dirname + "/public/chat.html");
+  res.sendFile(path.join(__dirname, "public", "chat.html"));
 });
 
-app.use(
-  session({
-    secret: "ogrenci-gizli",
-    resave: false,
-    saveUninitialized: false
-  })
-);
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE,
-    password TEXT
-  )
-`);
-
+// KAYIT
 app.post("/register", async (req, res) => {
-  const hash = await bcrypt.hash(req.body.password, 10);
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.send("Eksik bilgi");
+  }
+
+  const hash = await bcrypt.hash(password, 10);
+
   db.run(
-    "INSERT INTO users (username, password) VALUES (?,?)",
-    [req.body.username, hash],
-    err => {
-      if (err) return res.send("Kullanıcı adı alınmış");
+    "INSERT INTO users (username, password) VALUES (?, ?)",
+    [username, hash],
+    (err) => {
+      if (err) {
+        return res.send("Kullanıcı adı zaten var");
+      }
+      req.session.user = username;
       res.redirect("/chat.html");
     }
   );
 });
 
+// GİRİŞ
 app.post("/login", (req, res) => {
+  const { username, password } = req.body;
+
   db.get(
-    "SELECT * FROM users WHERE username=?",
-    [req.body.username],
+    "SELECT * FROM users WHERE username = ?",
+    [username],
     async (err, user) => {
-      if (!user) return res.send("Kullanıcı yok");
-      const ok = await bcrypt.compare(req.body.password, user.password);
-      if (!ok) return res.send("Şifre yanlış");
+      if (!user) {
+        return res.send("Kullanıcı yok");
+      }
+
+      const ok = await bcrypt.compare(password, user.password);
+      if (!ok) {
+        return res.send("Şifre yanlış");
+      }
+
       req.session.user = user.username;
       res.redirect("/chat.html");
     }
   );
 });
 
-// ---- SOCKET ----
-const onlineUsers = {};
+// MESAJLARI GETİR
+app.get("/messages", (req, res) => {
+  if (!req.session.user) return res.json([]);
 
-io.on("connection", socket => {
-  socket.on("join", username => {
-    onlineUsers[username] = socket.id;
-    io.emit("users", Object.keys(onlineUsers));
-  });
-
-  socket.on("privateMessage", data => {
-    const targetSocket = onlineUsers[data.to];
-    if (targetSocket) {
-      io.to(targetSocket).emit("privateMessage", data);
-      socket.emit("privateMessage", data);
+  db.all(
+    "SELECT username, message FROM messages ORDER BY id ASC",
+    [],
+    (err, rows) => {
+      res.json(rows || []);
     }
-  });
+  );
+});
 
-  socket.on("disconnect", () => {
-    for (let user in onlineUsers) {
-      if (onlineUsers[user] === socket.id) {
-        delete onlineUsers[user];
-      }
+// MESAJ GÖNDER
+app.post("/messages", (req, res) => {
+  if (!req.session.user) return res.sendStatus(403);
+
+  const message = req.body.message;
+  if (!message) return res.sendStatus(400);
+
+  db.run(
+    "INSERT INTO messages (username, message) VALUES (?, ?)",
+    [req.session.user, message],
+    () => {
+      res.sendStatus(200);
     }
-    io.emit("users", Object.keys(onlineUsers));
+  );
+});
+
+// ÇIKIŞ
+app.get("/logout", (req, res) => {
+  req.session.destroy(() => {
+    res.redirect("/");
   });
 });
 
-server.listen(3000, () =>
-  console.log("✅ http://localhost:3000")
-);
+// ====== SERVER ======
 const PORT = process.env.PORT || 3000;
-
 server.listen(PORT, () => {
   console.log("Sunucu çalışıyor: " + PORT);
 });
